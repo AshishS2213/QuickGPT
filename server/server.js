@@ -12,8 +12,19 @@ const app = express();
 
 await connectDB()
 
-// Stripe Webhooks
-app.post('/api/stripe', express.raw({type: 'application/json'}), stripeWebhooks)
+// Test endpoint to verify server is running
+app.get('/api/test', (req, res) => {
+    res.json({success: true, message: "Server is working", timestamp: new Date()});
+});
+
+// Stripe Webhooks - Raw middleware to capture all requests
+app.post('/api/stripe', (req, res, next) => {
+    console.log("🔔 POST /api/stripe received");
+    console.log("Headers:", Object.keys(req.headers));
+    console.log("Content-Type:", req.headers['content-type']);
+    console.log("Stripe-Signature:", req.headers['stripe-signature'] ? 'Present' : 'Missing ❌');
+    next();
+}, express.raw({type: 'application/json'}), stripeWebhooks)
 
 // Middleware
 app.use(cors());
