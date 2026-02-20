@@ -3,10 +3,12 @@ import Chat from "../models/Chat.js";
 import User from "../models/User.js";
 import imagekit from "../configs/imageKit.js";
 import openai from "../configs/openai.js";
-import { getCurrentDateContext, enhancePromptWithContext } from "../utils/contextGenerator.js";
+import { getCurrentDateContext } from "../utils/contextGenerator.js";
+import { createOptimizedGeminiMessage } from "../utils/geminiContextFormatter.js";
 
 
 // Text_Based AI Assistant Controller with Real-Time Context
+// This controller NOW prioritizes current date context over model training data
 export const textMessageController = async (req, res) => {
     try {
         const userId = req.user._id;
@@ -21,6 +23,9 @@ export const textMessageController = async (req, res) => {
         const chat = await Chat.findOne({userId, _id: chatId});
         const dateContext = getCurrentDateContext();
         
+        // Log for debugging
+        console.log(`[${dateContext.currentDate}] User prompt: "${prompt}"`);
+        
         // Store the original user message in chat history
         chat.messages.push({
             role:"user", 
@@ -30,31 +35,16 @@ export const textMessageController = async (req, res) => {
             dateContext: dateContext
         });
 
-        // Enhance the prompt with current date/time context
-        const enhancedPrompt = enhancePromptWithContext(prompt);
+        // Create optimized message with context that Gemini WILL recognize
+        // This uses a single message with prepended context (more effective than system role)
+        const optimizedMessage = createOptimizedGeminiMessage(prompt);
 
-        // Create system message with current date awareness
-        const systemMessage = `You are a helpful AI assistant. Today's date is ${dateContext.formattedDate} (${dateContext.dayOfWeek}) at ${dateContext.currentTime} ${dateContext.timezone}. 
-
-When answering questions:
-1. Be aware that today is ${dateContext.currentDate}
-2. Use relative dates appropriately (e.g., "today", "tomorrow", "next week")
-3. If asked about current events, news, or "now", reference ${dateContext.currentDate}
-4. When discussing events or data, compare dates relative to today: ${dateContext.currentDate}
-5. If discussing future dates, calculate from today's date ${dateContext.currentDate}`;
-
+        // Call Gemini with the optimized context-aware message
         const {choices} = await openai.chat.completions.create({
             model: "gemini-3-flash-preview",
-            messages: [
-                {
-                    role: "user",
-                    content: systemMessage,
-                },
-                {
-                    role: "user",
-                    content: enhancedPrompt,
-                },
-            ],
+            messages: [optimizedMessage],
+            temperature: 0.7,
+            top_p: 1,
         });
 
         const reply = {
@@ -63,6 +53,8 @@ When answering questions:
             isImage: false,
             dateContext: dateContext
         };
+        
+        console.log(`[${dateContext.currentDate}] AI Response preview: "${reply.content.substring(0, 100)}..."`);
         res.json({success: true, reply});
         
         chat.messages.push(reply);
@@ -70,6 +62,7 @@ When answering questions:
         await User.updateOne({_id: userId}, {$inc: {credits: -1}});
 
     } catch (error) {
+        console.error(`Error in textMessageController: ${error.message}`);
         res.json({success: false, message: error.message});
     }
 }
