@@ -3,8 +3,8 @@
  * Ensures date context is unmissably clear to the model
  */
 
-import { getCurrentDateContext, getDetailedDateContext } from "./contextGenerator.js";
-import { formatForSystemPrompt, getDetailedDateContext as getDetailedContext } from "./realtimeData.js";
+import { getCurrentDateContext } from "./contextGenerator.js";
+import { getDetailedDateContext, formatForSystemPrompt } from "./realtimeData.js";
 
 /**
  * Create an ultra-clear system instruction that Gemini will follow
@@ -12,7 +12,7 @@ import { formatForSystemPrompt, getDetailedDateContext as getDetailedContext } f
  */
 export const createGeminiSystemInstruction = () => {
     const dateContext = getCurrentDateContext();
-    const detailedContext = getDetailedContext();
+    const detailedContext = getDetailedDateContext();
     
     return `IMPORTANT: You MUST follow these instructions about the current date:
 
@@ -68,7 +68,7 @@ User Question: ${prompt}`;
  */
 export const createStructuredDateContext = () => {
     const dateContext = getCurrentDateContext();
-    const detailedContext = getDetailedContext();
+    const detailedContext = getDetailedDateContext();
     
     return `
 ╔════════════════════════════════════════════════════════════════╗

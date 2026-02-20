@@ -3,8 +3,8 @@
  * This ensures all handlers have access to current date information
  */
 
-import { getCurrentDateContext, formatForSystemPrompt } from "../utils/contextGenerator.js";
-import { getDetailedDateContext, formatForSystemPrompt as formatRealtimeSystemPrompt } from "../utils/realtimeData.js";
+import { getCurrentDateContext } from "../utils/contextGenerator.js";
+import { getDetailedDateContext, formatForSystemPrompt } from "../utils/realtimeData.js";
 
 /**
  * Middleware to enrich requests with date/time context
@@ -16,8 +16,7 @@ export const contextMiddleware = (req, res, next) => {
         req.dateContext = {
             ...getCurrentDateContext(),
             ...getDetailedDateContext(),
-            systemPromptAddition: formatForSystemPrompt(),
-            realtimeSystemPrompt: formatRealtimeSystemPrompt()
+            systemPromptAddition: formatForSystemPrompt()
         };
         
         // Also attach as response header for debugging
