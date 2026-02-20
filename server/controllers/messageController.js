@@ -3,9 +3,10 @@ import Chat from "../models/Chat.js";
 import User from "../models/User.js";
 import imagekit from "../configs/imageKit.js";
 import openai from "../configs/openai.js";
+import { getCurrentDateContext, enhancePromptWithContext } from "../utils/contextGenerator.js";
 
 
-// Text_Based AI Assistant Controller
+// Text_Based AI Assistant Controller with Real-Time Context
 export const textMessageController = async (req, res) => {
     try {
         const userId = req.user._id;
@@ -18,24 +19,55 @@ export const textMessageController = async (req, res) => {
         const {chatId, prompt} = req.body;
 
         const chat = await Chat.findOne({userId, _id: chatId});
-        chat.messages.push({role:"user", content: prompt, timestamp: Date.now(), isImage: false});
+        const dateContext = getCurrentDateContext();
+        
+        // Store the original user message in chat history
+        chat.messages.push({
+            role:"user", 
+            content: prompt, 
+            timestamp: Date.now(), 
+            isImage: false,
+            dateContext: dateContext
+        });
+
+        // Enhance the prompt with current date/time context
+        const enhancedPrompt = enhancePromptWithContext(prompt);
+
+        // Create system message with current date awareness
+        const systemMessage = `You are a helpful AI assistant. Today's date is ${dateContext.formattedDate} (${dateContext.dayOfWeek}) at ${dateContext.currentTime} ${dateContext.timezone}. 
+
+When answering questions:
+1. Be aware that today is ${dateContext.currentDate}
+2. Use relative dates appropriately (e.g., "today", "tomorrow", "next week")
+3. If asked about current events, news, or "now", reference ${dateContext.currentDate}
+4. When discussing events or data, compare dates relative to today: ${dateContext.currentDate}
+5. If discussing future dates, calculate from today's date ${dateContext.currentDate}`;
 
         const {choices} = await openai.chat.completions.create({
-        model: "gemini-3-flash-preview",
-        messages: [
-            {
-                role: "user",
-                content: prompt,
-            },
-        ],
-    });
+            model: "gemini-3-flash-preview",
+            messages: [
+                {
+                    role: "user",
+                    content: systemMessage,
+                },
+                {
+                    role: "user",
+                    content: enhancedPrompt,
+                },
+            ],
+        });
 
-    const reply = {...choices[0].message, timestamp: Date.now(), isImage: false};
-    res.json({success: true, reply});
-    
-    chat.messages.push(reply);
-    await chat.save();
-    await User.updateOne({_id: userId}, {$inc: {credits: -1}});
+        const reply = {
+            ...choices[0].message, 
+            timestamp: Date.now(), 
+            isImage: false,
+            dateContext: dateContext
+        };
+        res.json({success: true, reply});
+        
+        chat.messages.push(reply);
+        await chat.save();
+        await User.updateOne({_id: userId}, {$inc: {credits: -1}});
 
     } catch (error) {
         res.json({success: false, message: error.message});

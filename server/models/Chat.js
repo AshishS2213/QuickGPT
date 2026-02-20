@@ -11,6 +11,14 @@ const chatSchema = new mongoose.Schema({
             role: {type: String, required: true},
             content: {type: String, required: true},
             timestamp: {type: Number, required: true},
+            dateContext: {
+                currentDate: String,
+                currentDateTime: String,
+                currentTime: String,
+                dayOfWeek: String,
+                formattedDate: String,
+                timezone: String
+            }
         }
     ]
 }, {timestamps: true})

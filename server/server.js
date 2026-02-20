@@ -2,6 +2,7 @@ import express from 'express';
 import 'dotenv/config';
 import cors from 'cors';
 import connectDB from './configs/db.js';
+import contextMiddleware from './middlewares/contextMiddleware.js';
 import userRouter from './routes/userRoutes.js';
 import chatRouter from './routes/chatRoutes.js';
 import messageRouter from './routes/messageRoutes.js';
@@ -29,6 +30,9 @@ app.post('/api/stripe', (req, res, next) => {
 // Middleware
 app.use(cors());
 app.use(express.json());
+
+// Apply date/time context middleware to all requests
+app.use(contextMiddleware);
 
 // Routes
 app.get('/', (req, res) => res.send('Server is live'))
