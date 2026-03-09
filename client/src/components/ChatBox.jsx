@@ -33,9 +33,9 @@ const ChatBox = () => {
           setMessages(prev => [...prev, data.reply])
           //Decrease user credits
           if(mode === 'image'){
-            setUser(prev => ({...prev, credits: prev.credits - 2}))
+            setUser(prev => ({...prev, credits: prev.credits - 0}))
           }else{
-            setUser(prev => ({...prev, credits: prev.credits - 1}))
+            setUser(prev => ({...prev, credits: prev.credits - 0}))
           }
         }else{
           toast.error(data.message)
