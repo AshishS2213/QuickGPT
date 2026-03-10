@@ -55,6 +55,13 @@ export const loginUser = async (req, res) => {
 export const getUser = async (req, res) => {
     try {
         const user = req.user;
+
+        // CREDIT SYSTEM DISABLED — Always return 20000 credits regardless of DB value
+        const userData = {
+            ...user.toObject(),
+            credits: 20000
+        };
+
         return res.json({success: true, user});
     } catch (error) {
         return res.json({success: false, message: error.message});

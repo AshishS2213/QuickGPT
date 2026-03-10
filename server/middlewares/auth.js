@@ -23,6 +23,10 @@ export const protect = async (req, res, next) => {
             return res.json({success: false, message: "User not found"});
         }
 
+        // CREDIT SYSTEM DISABLED — Force credits to always be 20000
+        // regardless of what value is stored in the database
+        user.credits = 20000;
+
         req.user = user;
         next();
     } catch (error) {
