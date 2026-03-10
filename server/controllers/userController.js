@@ -62,7 +62,7 @@ export const getUser = async (req, res) => {
             credits: 20000
         };
 
-        return res.json({success: true, user});
+        return res.json({success: true, user: userData});
     } catch (error) {
         return res.json({success: false, message: error.message});
     }
