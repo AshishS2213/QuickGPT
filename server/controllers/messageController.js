@@ -14,9 +14,9 @@ export const textMessageController = async (req, res) => {
         const userId = req.user._id;
 
         // Check if user has enough credits
-        if(req.user.credits < 1){
-            return res.json({success: false, message: "You don't have enough credits to use this feature"});
-        }
+        // if(req.user.credits < 1){
+        //     return res.json({success: false, message: "You don't have enough credits to use this feature"});
+        // }
 
         const {chatId, prompt} = req.body;
 
@@ -59,7 +59,7 @@ export const textMessageController = async (req, res) => {
         
         chat.messages.push(reply);
         await chat.save();
-        await User.updateOne({_id: userId}, {$inc: {credits: -1}});
+        // await User.updateOne({_id: userId}, {$inc: {credits: -1}});
 
     } catch (error) {
         console.error(`Error in textMessageController: ${error.message}`);
@@ -72,9 +72,9 @@ export const imageMessageController = async (req, res) => {
     try {
         const userId = req.user._id;
         // Check if user has enough credits
-        if(req.user.credits < 2){
-            return res.json({success: false, message: "You don't have enough credits to generate an image"});
-        }
+        // if(req.user.credits < 2){
+        //     return res.json({success: false, message: "You don't have enough credits to generate an image"});
+        // }
         const {prompt, chatId, isPublished} = req.body;
         // Find the chat
         const chat = await Chat.findOne({userId, _id: chatId});
@@ -118,7 +118,7 @@ export const imageMessageController = async (req, res) => {
         chat.messages.push(reply);
         await chat.save();
 
-        await User.updateOne({_id: userId}, {$inc: {credits: -2}});
+        // await User.updateOne({_id: userId}, {$inc: {credits: -2}});
 
     } catch (error) {
         res.json({success: false, message: error.message});
