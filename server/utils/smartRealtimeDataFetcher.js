@@ -12,7 +12,8 @@ const QUERY_KEYWORDS = {
     crypto: ['bitcoin', 'ethereum', 'btc', 'eth', 'crypto', 'cryptocurrency', 'price of', 'coin', 'blockchain', 'solana', 'cardano', 'xrp', 'dogecoin', 'doge', 'litecoin', 'ltc'],
     news: ['news', 'breaking', 'latest', 'today\'s', 'what\'s new', 'what is new', 'current events', 'what\'s happening', 'breaking news', 'headline', 'happening', 'today news'],
     stock: ['stock', 'share', 'price', 'nasdaq', 'dow', 's&p', 'market', 'apple', 'google', 'tesla', 'aapl', 'msft', 'shares', 'trading'],
-    trending: ['trending', 'viral', 'popular', 'github', 'what\'s hot', 'most popular', 'number one']
+    trending: ['trending', 'viral', 'popular', 'github', 'what\'s hot', 'most popular', 'number one'],
+    factual: ['who', 'what', 'when', 'where', 'why', 'how', 'president', 'leader', 'politician', 'elected', 'election', 'government', 'minister', 'senator', 'prime minister', 'monarch', 'king', 'queen', 'emperor', 'head of', 'in charge of']
 };
 
 /**
@@ -256,6 +257,53 @@ export async function fetchTrendingTopics() {
 }
 
 /**
+ * Search Wikipedia for factual information
+ * Useful for answering "who is", "what is", questions with current context
+ * @param {string} query - Search query (e.g., "president of united states")
+ * @returns {Promise<Object>} Wikipedia article summary
+ */
+export async function fetchWikipediaSearch(query) {
+    try {
+        // Search Wikipedia for the query
+        const searchResponse = await fetchWithTimeout(
+            `https://en.wikipedia.org/w/api.php?action=query&format=json&srsearch=${encodeURIComponent(query)}&list=search`,
+            5000
+        );
+
+        if (!searchResponse.query || !searchResponse.query.search || searchResponse.query.search.length === 0) {
+            return { error: `No Wikipedia article found for "${query}"` };
+        }
+
+        // Get the first search result title
+        const firstResult = searchResponse.query.search[0];
+        const pageTitle = firstResult.title;
+
+        // Fetch the full article summary
+        const articleResponse = await fetchWithTimeout(
+            `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(pageTitle)}`,
+            5000
+        );
+
+        if (!articleResponse.extract) {
+            return { error: `Unable to fetch article content for "${pageTitle}"` };
+        }
+
+        return {
+            type: 'factual',
+            title: articleResponse.title,
+            summary: articleResponse.extract.substring(0, 500),
+            url: articleResponse.content_urls?.en || `https://en.wikipedia.org/wiki/${pageTitle}`,
+            lastModified: articleResponse.description || 'Wikipedia entry',
+            timestamp: new Date().toISOString(),
+            searchQuery: query
+        };
+    } catch (error) {
+        console.error('Wikipedia search error:', error.message);
+        return { error: `Unable to search Wikipedia: ${error.message}` };
+    }
+}
+
+/**
  * Format fetched data into a readable string for Gemini context
  * @param {Array<Object>} dataArray - Array of fetched data objects
  * @returns {string} Formatted string for injection into prompt
@@ -306,6 +354,13 @@ export function formatRealtimeDataForContext(dataArray) {
             case 'trending':
                 formatted += `🔥 TRENDING - ${data.title}\n`;
                 formatted += `   ${data.description}\n`;
+                break;
+
+            case 'factual':
+                formatted += `📖 FACTUAL INFORMATION - ${data.title}\n`;
+                formatted += `   ${data.summary}\n`;
+                formatted += `   Source: Wikipedia (Current as of today)\n`;
+                formatted += `   URL: ${data.url}\n`;
                 break;
 
             default:
@@ -425,6 +480,11 @@ export async function fetchRealtimeDataIfNeeded(prompt) {
         fetchPromises.push(fetchTrendingTopics());
     }
 
+    // Fetch from Wikipedia for factual questions
+    if (queryTypes.includes('factual')) {
+        fetchPromises.push(fetchWikipediaSearch(prompt));
+    }
+
     // Execute all fetches in parallel
     let fetchedData = [];
     if (fetchPromises.length > 0) {
@@ -456,7 +516,9 @@ export default {
     fetchWeather,
     fetchCryptoData,
     fetchStockData,
+    fetchNewsHeadlines,
     fetchTrendingTopics,
+    fetchWikipediaSearch,
     formatRealtimeDataForContext,
     fetchRealtimeDataIfNeeded
 };

@@ -96,9 +96,35 @@ export const isCurrentDataQuery = (prompt) => {
         'moment',
         'recent',
         'trending',
-        'breaking'
+        'breaking',
+        // Factual question keywords for Wikipedia search
+        'who',
+        'what',
+        'when',
+        'where',
+        'why',
+        'how',
+        'president',
+        'leader',
+        'politician',
+        'elected',
+        'election',
+        'government',
+        'political',
+        'minister',
+        'senator',
+        'representative',
+        'prime minister',
+        'monarch',
+        'king',
+        'queen',
+        'emperor',
+        'ruler',
+        'leader of',
+        'head of',
+        'in charge of'
     ];
-    
+
     const lowerPrompt = prompt.toLowerCase();
     return currentDataKeywords.some(keyword => lowerPrompt.includes(keyword));
 };
