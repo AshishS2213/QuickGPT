@@ -162,6 +162,8 @@ export class CacheManager {
             crypto: 300,       // 5 minutes
             stock: 600,        // 10 minutes
             trending: 1200,    // 20 minutes
+            factual: 1200,     // 20 minutes (Wikipedia data)
+            sports: 600,       // 10 minutes (Sports scores update frequently)
             default: 600       // 10 minutes
         };
 

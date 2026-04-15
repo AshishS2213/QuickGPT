@@ -31,10 +31,22 @@ export const textMessageController = async (req, res) => {
         // Fetch real-time data if query requires it
         let realtimeData = null;
         if (isCurrentDataQuery(prompt)) {
-            console.log('[Real-Time Data] Attempting to fetch live data...');
+            console.log('[Real-Time Data] Query detected as requiring real-time data');
+            console.log(`[Real-Time Data] Attempting to fetch live data for: "${prompt}"`);
             realtimeData = await fetchRealtimeDataIfNeeded(prompt);
+            console.log(`[Real-Time Data] Fetch result:`, {
+                success: realtimeData?.success,
+                queryTypes: realtimeData?.queryTypes,
+                dataCount: realtimeData?.data?.length,
+                hasFormatted: !!realtimeData?.formatted
+            });
+            if (realtimeData?.formatted) {
+                console.log(`[Real-Time Data] Formatted context preview:`, realtimeData.formatted.substring(0, 200));
+            }
+        } else {
+            console.log('[Real-Time Data] Query not detected as needing real-time data');
         }
-        
+
         // Store the original user message in chat history
         chat.messages.push({
             role:"user", 

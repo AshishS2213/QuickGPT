@@ -90,7 +90,7 @@ export const createStructuredDateContext = () => {
  * Choose the best message format for Gemini
  * Uses structured approach that Gemini will respect
  * @param {string} userPrompt - The user's question
- * @param {Object} realtimeData - Optional real-time data (weather, crypto, etc.)
+ * @param {Object} realtimeData - Optional real-time data (weather, crypto, sports, etc.)
  * @returns {Object} Optimized message object
  */
 export const createOptimizedGeminiMessage = (userPrompt, realtimeData = null) => {
@@ -99,10 +99,22 @@ export const createOptimizedGeminiMessage = (userPrompt, realtimeData = null) =>
 
     let fullContent = `${systemInstruction}\n\n${contextualPrompt}`;
 
-    // Inject real-time data if available
+    // Inject real-time data if available - PRIORITIZE SPORTS DATA
     if (realtimeData && realtimeData.success && realtimeData.formatted) {
-        fullContent += `\n${realtimeData.formatted}`;
+        console.log(`[Gemini Context] Injecting real-time data of type: ${realtimeData.queryTypes}`);
+        fullContent += `\n\n📊 REAL-TIME DATA CONTEXT:\n${realtimeData.formatted}`;
+    } else if (realtimeData && realtimeData.data && realtimeData.data.length > 0) {
+        // Even if success is false, try to use any data that was fetched
+        console.log(`[Gemini Context] Injecting partial real-time data: ${JSON.stringify(realtimeData.data[0]).substring(0,100)}`);
+        console.log(`[Gemini Context] Using formatted context if available`);
+        if (realtimeData.formatted) {
+            fullContent += `\n\n📊 REAL-TIME DATA:\n${realtimeData.formatted}`;
+        }
+    } else if (realtimeData) {
+        console.log(`[Gemini Context] Real-time data object exists but without success/formatted:`, realtimeData);
     }
+
+    console.log(`[Gemini Context] Final message length: ${fullContent.length} characters`);
 
     return {
         role: "user",
