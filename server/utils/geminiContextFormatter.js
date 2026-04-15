@@ -90,15 +90,23 @@ export const createStructuredDateContext = () => {
  * Choose the best message format for Gemini
  * Uses structured approach that Gemini will respect
  * @param {string} userPrompt - The user's question
+ * @param {Object} realtimeData - Optional real-time data (weather, crypto, etc.)
  * @returns {Object} Optimized message object
  */
-export const createOptimizedGeminiMessage = (userPrompt) => {
+export const createOptimizedGeminiMessage = (userPrompt, realtimeData = null) => {
     const systemInstruction = createGeminiSystemInstruction();
     const contextualPrompt = prependDateContextToPrompt(userPrompt);
-    
+
+    let fullContent = `${systemInstruction}\n\n${contextualPrompt}`;
+
+    // Inject real-time data if available
+    if (realtimeData && realtimeData.success && realtimeData.formatted) {
+        fullContent += `\n${realtimeData.formatted}`;
+    }
+
     return {
         role: "user",
-        content: `${systemInstruction}\n\n${contextualPrompt}`
+        content: fullContent
     };
 };
 

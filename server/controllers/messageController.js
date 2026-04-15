@@ -5,6 +5,8 @@ import imagekit from "../configs/imageKit.js";
 import openai from "../configs/openai.js";
 import { getCurrentDateContext } from "../utils/contextGenerator.js";
 import { createOptimizedGeminiMessage } from "../utils/geminiContextFormatter.js";
+import { fetchRealtimeDataIfNeeded } from "../utils/smartRealtimeDataFetcher.js";
+import { isCurrentDataQuery } from "../utils/realtimeDataFetcher.js";
 
 
 // Text_Based AI Assistant Controller with Real-Time Context
@@ -22,9 +24,16 @@ export const textMessageController = async (req, res) => {
 
         const chat = await Chat.findOne({userId, _id: chatId});
         const dateContext = getCurrentDateContext();
-        
+
         // Log for debugging
         console.log(`[${dateContext.currentDate}] User prompt: "${prompt}"`);
+
+        // Fetch real-time data if query requires it
+        let realtimeData = null;
+        if (isCurrentDataQuery(prompt)) {
+            console.log('[Real-Time Data] Attempting to fetch live data...');
+            realtimeData = await fetchRealtimeDataIfNeeded(prompt);
+        }
         
         // Store the original user message in chat history
         chat.messages.push({
@@ -37,7 +46,7 @@ export const textMessageController = async (req, res) => {
 
         // Create optimized message with context that Gemini WILL recognize
         // This uses a single message with prepended context (more effective than system role)
-        const optimizedMessage = createOptimizedGeminiMessage(prompt);
+        const optimizedMessage = createOptimizedGeminiMessage(prompt, realtimeData);
 
         // Call Gemini with the optimized context-aware message
         const {choices} = await openai.chat.completions.create({
