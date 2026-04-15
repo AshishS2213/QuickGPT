@@ -122,7 +122,23 @@ export const isCurrentDataQuery = (prompt) => {
         'ruler',
         'leader of',
         'head of',
-        'in charge of'
+        'in charge of',
+        // Sports keywords
+        'ipl',
+        'match',
+        'cricket',
+        'score',
+        'game',
+        'football',
+        'nba',
+        'sport',
+        'league',
+        'team',
+        'championship',
+        'tournament',
+        'fixture',
+        'live score',
+        'upcoming match'
     ];
 
     const lowerPrompt = prompt.toLowerCase();

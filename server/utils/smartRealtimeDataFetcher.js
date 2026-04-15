@@ -13,7 +13,8 @@ const QUERY_KEYWORDS = {
     news: ['news', 'breaking', 'latest', 'today\'s', 'what\'s new', 'what is new', 'current events', 'what\'s happening', 'breaking news', 'headline', 'happening', 'today news'],
     stock: ['stock', 'share', 'price', 'nasdaq', 'dow', 's&p', 'market', 'apple', 'google', 'tesla', 'aapl', 'msft', 'shares', 'trading'],
     trending: ['trending', 'viral', 'popular', 'github', 'what\'s hot', 'most popular', 'number one'],
-    factual: ['who', 'what', 'when', 'where', 'why', 'how', 'president', 'leader', 'politician', 'elected', 'election', 'government', 'minister', 'senator', 'prime minister', 'monarch', 'king', 'queen', 'emperor', 'head of', 'in charge of']
+    factual: ['who', 'what', 'when', 'where', 'why', 'how', 'president', 'leader', 'politician', 'elected', 'election', 'government', 'minister', 'senator', 'prime minister', 'monarch', 'king', 'queen', 'emperor', 'head of', 'in charge of'],
+    sports: ['ipl', 'match', 'cricket', 'score', 'game', 'football', 'nba', 'sport', 'league', 'team', 'play', 'championship', 'tournament', 'fixture', 'today\'s match', 'today match', 'upcoming match', 'live score', 'latest match', 'cricket score']
 };
 
 /**
@@ -304,6 +305,74 @@ export async function fetchWikipediaSearch(query) {
 }
 
 /**
+ * Fetch sports data (cricket, football, etc.)
+ * Uses CricketData API (free, no key required) for cricket matches
+ * Falls back to generic sports info if specific API unavailable
+ * @returns {Promise<Object>} Sports event data
+ */
+export async function fetchSportsData() {
+    try {
+        // Try to fetch IPL/Cricket matches from CricketData API
+        const response = await fetchWithTimeout(
+            'https://api.cricketapi.com/v1/matches?apikey=free&type=live,upcoming',
+            5000
+        );
+
+        // Check if we got valid data
+        if (response.data && Array.isArray(response.data) && response.data.length > 0) {
+            const matches = response.data.slice(0, 3).map(match => ({
+                name: match.name || match.matchName || 'Cricket Match',
+                series: match.series || 'Unknown Series',
+                status: match.status || 'Scheduled',
+                date: match.date || match.dateTimeGMT || new Date().toISOString(),
+                team1: match.team1 || 'Team A',
+                team2: match.team2 || 'Team B',
+                venue: match.venue || 'Unknown Venue',
+                format: match.format || 'T20',
+                matchId: match.id
+            }));
+
+            return {
+                type: 'sports',
+                sport: 'cricket',
+                matches: matches,
+                source: 'CricketAPI',
+                timestamp: new Date().toISOString()
+            };
+        } else {
+            // Fallback: Return generic sports info with today's info
+            return {
+                type: 'sports',
+                sport: 'cricket',
+                matches: [{
+                    name: 'Live Match Information',
+                    status: 'Check official cricket websites',
+                    note: 'For real-time match updates, visit: cricket.yahoo.com, espncricinfo.com, or your local sports app'
+                }],
+                source: 'Generic (API unavailable)',
+                timestamp: new Date().toISOString()
+            };
+        }
+    } catch (error) {
+        console.error('Sports data fetch error:', error.message);
+
+        // Graceful fallback with helpful information
+        return {
+            type: 'sports',
+            sport: 'cricket',
+            matches: [{
+                name: 'Sports Information Unavailable',
+                status: 'Fallback Mode',
+                suggestion: 'Check official sports websites like Espncricinfo, Cricket.com.au, or IPL official website for live match schedules and scores'
+            }],
+            source: 'Fallback',
+            timestamp: new Date().toISOString(),
+            error: `Unable to fetch live sports data: ${error.message}`
+        };
+    }
+}
+
+/**
  * Format fetched data into a readable string for Gemini context
  * @param {Array<Object>} dataArray - Array of fetched data objects
  * @returns {string} Formatted string for injection into prompt
@@ -361,6 +430,31 @@ export function formatRealtimeDataForContext(dataArray) {
                 formatted += `   ${data.summary}\n`;
                 formatted += `   Source: Wikipedia (Current as of today)\n`;
                 formatted += `   URL: ${data.url}\n`;
+                break;
+
+            case 'sports':
+                formatted += `🏏 SPORTS - ${data.sport.toUpperCase()}\n`;
+                formatted += `   Source: ${data.source}\n`;
+                if (data.matches && data.matches.length > 0) {
+                    for (const match of data.matches) {
+                        formatted += `   • ${match.name || 'Match'}\n`;
+                        if (match.team1 && match.team2) {
+                            formatted += `     ${match.team1} vs ${match.team2}\n`;
+                        }
+                        if (match.venue) {
+                            formatted += `     Venue: ${match.venue}\n`;
+                        }
+                        if (match.status) {
+                            formatted += `     Status: ${match.status}\n`;
+                        }
+                        if (match.date) {
+                            formatted += `     Date: ${match.date}\n`;
+                        }
+                        if (match.suggestion) {
+                            formatted += `     ℹ️ ${match.suggestion}\n`;
+                        }
+                    }
+                }
                 break;
 
             default:
@@ -485,6 +579,11 @@ export async function fetchRealtimeDataIfNeeded(prompt) {
         fetchPromises.push(fetchWikipediaSearch(prompt));
     }
 
+    // Fetch sports data if needed
+    if (queryTypes.includes('sports')) {
+        fetchPromises.push(fetchSportsData());
+    }
+
     // Execute all fetches in parallel
     let fetchedData = [];
     if (fetchPromises.length > 0) {
@@ -519,6 +618,7 @@ export default {
     fetchNewsHeadlines,
     fetchTrendingTopics,
     fetchWikipediaSearch,
+    fetchSportsData,
     formatRealtimeDataForContext,
     fetchRealtimeDataIfNeeded
 };
