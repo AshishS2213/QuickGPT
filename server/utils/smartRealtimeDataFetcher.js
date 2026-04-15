@@ -14,7 +14,7 @@ const QUERY_KEYWORDS = {
     stock: ['stock', 'share', 'price', 'nasdaq', 'dow', 's&p', 'market', 'apple', 'google', 'tesla', 'aapl', 'msft', 'shares', 'trading'],
     trending: ['trending', 'viral', 'popular', 'github', 'what\'s hot', 'most popular', 'number one'],
     factual: ['who', 'what', 'when', 'where', 'why', 'how', 'president', 'leader', 'politician', 'elected', 'election', 'government', 'minister', 'senator', 'prime minister', 'monarch', 'king', 'queen', 'emperor', 'head of', 'in charge of'],
-    sports: ['ipl', 'match', 'cricket', 'score', 'game', 'football', 'nba', 'sport', 'league', 'team', 'play', 'championship', 'tournament', 'fixture', 'today\'s match', 'today match', 'upcoming match', 'live score', 'latest match', 'cricket score']
+    sports: ['ipl', 'cricket', 'football', 'nba', 'sport', 'league', 'championship', 'tournament', 'live score', 'cricket match', 'football match', 'ipl match', 'today match', 'today\'s match', 'upcoming match', 'match today', 'cricket score', 'football score', 'sports news', 'game today', 'nba game', 'tennis', 'basketball', 'soccer', 'hockey', 'rugby']
 };
 
 /**
@@ -305,8 +305,40 @@ export async function fetchWikipediaSearch(query) {
 }
 
 /**
+ * Check if a match is scheduled for today
+ * @param {string} matchDate - Match date string (various formats)
+ * @returns {boolean} True if match is today
+ */
+function isTodaysMatch(matchDate) {
+    if (!matchDate) return false;
+
+    try {
+        // Parse the date - handle various formats
+        let matchTime;
+
+        if (typeof matchDate === 'string') {
+            // Handle ISO format, Unix timestamp, or date strings
+            matchTime = new Date(matchDate).getTime();
+        } else {
+            matchTime = new Date(matchDate).getTime();
+        }
+
+        // Get today's date at midnight UTC
+        const now = new Date();
+        const todayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+        const todayEnd = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000);
+
+        return matchTime >= todayStart.getTime() && matchTime < todayEnd.getTime();
+    } catch (error) {
+        console.warn('Could not parse match date:', matchDate, error.message);
+        return false;
+    }
+}
+
+/**
  * Fetch sports data (cricket, football, etc.)
  * Uses multiple free APIs with fallbacks
+ * FIXED: Now filters for TODAY'S matches only, returns single consistent match
  * @returns {Promise<Object>} Sports event data
  */
 export async function fetchSportsData() {
@@ -322,7 +354,7 @@ export async function fetchSportsData() {
             );
             apiSource = 'CricketAPI';
         } catch (primaryError) {
-            console.log('Primary CricketAPI failed, trying fallback...');
+            console.log('[Sports] Primary CricketAPI failed, trying fallback...');
             // Fallback to alternative cricket data source
             try {
                 response = await fetchWithTimeout(
@@ -331,44 +363,73 @@ export async function fetchSportsData() {
                 );
                 apiSource = 'CricAPI';
             } catch (fallbackError) {
-                console.log('Both APIs failed, returning mock data with helpful message');
+                console.log('[Sports] Both APIs failed, returning fallback');
                 // If both APIs fail, return helpful fallback
                 return {
                     type: 'sports',
                     sport: 'cricket',
                     matches: [{
                         name: 'Live Cricket Match',
-                        status: 'Fetching live data...',
-                        note: 'For real-time cricket scores, visit: cricinfo.com, espn.com/cricket, or ipl.com',
+                        status: 'No matches today',
                         suggestion: 'Check ESPNcricinfo or the official IPL website (ipl.com) for current matches and live scores'
                     }],
-                    source: 'Live Data Service (attempting fetch)',
-                    timestamp: new Date().toISOString(),
-                    info: 'Live sports data is being retrieved. For fastest updates, check official cricket websites.'
+                    source: 'Live Data Service',
+                    timestamp: new Date().toISOString()
                 };
             }
         }
 
-        // Check if we got valid data from either API
+        // 🔥 FIX #1: FILTER FOR TODAY'S MATCHES ONLY
         if (response && response.data && Array.isArray(response.data) && response.data.length > 0) {
-            const matches = response.data.slice(0, 3).map(match => ({
-                name: match.name || match.matchName || 'Cricket Match',
-                series: match.series || 'Unknown Series',
-                status: match.status || 'Scheduled',
-                date: match.date || match.dateTimeGMT || new Date().toISOString(),
-                team1: match.team1 || 'Team A',
-                team2: match.team2 || 'Team B',
-                venue: match.venue || 'Unknown Venue',
-                format: match.format || 'T20',
-                matchId: match.id
-            }));
+            const todaysMatches = response.data.filter(match => {
+                const matchDate = match.date || match.dateTimeGMT || match.dateTime;
+                const isToday = isTodaysMatch(matchDate);
+                if (isToday) {
+                    console.log(`[Sports] Found today's match: ${match.team1 || 'Team A'} vs ${match.team2 || 'Team B'}`);
+                }
+                return isToday;
+            });
+
+            if (todaysMatches.length === 0) {
+                console.log('[Sports] No matches found for today');
+                return {
+                    type: 'sports',
+                    sport: 'cricket',
+                    matches: [{
+                        name: 'Cricket Matches',
+                        status: 'No matches scheduled for today',
+                        suggestion: 'Check back later or visit ipl.com for upcoming matches'
+                    }],
+                    source: apiSource,
+                    timestamp: new Date().toISOString()
+                };
+            }
+
+            // 🔥 FIX #2: RETURN ONLY THE FIRST (MAIN) MATCH FOR TODAY
+            // This ensures consistent single-match response
+            const mainMatch = todaysMatches[0];
+            console.log(`[Sports] Returning main match for today: ${mainMatch.team1 || 'Team A'} vs ${mainMatch.team2 || 'Team B'}`);
+
+            const matches = [{
+                name: mainMatch.name || mainMatch.matchName || `${mainMatch.team1} vs ${mainMatch.team2}`,
+                series: mainMatch.series || 'IPL',
+                status: mainMatch.status || 'Scheduled',
+                date: mainMatch.date || mainMatch.dateTimeGMT || mainMatch.dateTime || new Date().toISOString(),
+                team1: mainMatch.team1 || 'Team A',
+                team2: mainMatch.team2 || 'Team B',
+                venue: mainMatch.venue || 'Unknown Venue',
+                format: mainMatch.format || 'T20',
+                matchId: mainMatch.id
+            }];
 
             return {
                 type: 'sports',
                 sport: 'cricket',
                 matches: matches,
                 source: apiSource,
-                timestamp: new Date().toISOString()
+                timestamp: new Date().toISOString(),
+                matchCount: todaysMatches.length,
+                filteredAsToday: true
             };
         } else {
             // Fallback: Return generic sports info with helpful links
@@ -376,31 +437,28 @@ export async function fetchSportsData() {
                 type: 'sports',
                 sport: 'cricket',
                 matches: [{
-                    name: 'Live Match Information',
-                    status: 'Real-time cricket data',
-                    venue: 'Multiple venues',
-                    note: 'For specific match fixtures and live scores:'
+                    name: 'Cricket Matches',
+                    status: 'No matches available',
+                    suggestion: 'Please check: espncricinfo.com, ipl.com, or cricket.yahoo.com for live match details and current scores'
                 }],
                 source: 'Real-Time Sports Feed',
-                timestamp: new Date().toISOString(),
-                suggestion: 'Please check: espncricinfo.com, ipl.com, or cricket.yahoo.com for live match details and current scores'
+                timestamp: new Date().toISOString()
             };
         }
     } catch (error) {
-        console.error('Sports data fetch error:', error.message);
+        console.error('[Sports] Data fetch error:', error.message);
 
         // Graceful fallback with helpful information
         return {
             type: 'sports',
             sport: 'cricket',
             matches: [{
-                name: 'Sports Information Service',
-                status: 'Real-time Updates Available',
+                name: 'Cricket Matches',
+                status: 'Service temporarily unavailable',
                 suggestion: 'For live cricket scores and match information, check: ESPNcricinfo, IPL official website (ipl.com), or your local sports app'
             }],
             source: 'Sports Data Feed',
-            timestamp: new Date().toISOString(),
-            info: `Live sports data service available. Check official cricket websites for current matches.`
+            timestamp: new Date().toISOString()
         };
     }
 }
@@ -506,14 +564,28 @@ export function formatRealtimeDataForContext(dataArray) {
  * @returns {Promise<Object>} {success: boolean, data: Array, formatted: string}
  */
 export async function fetchRealtimeDataIfNeeded(prompt) {
-    // Check cache first
-    const cacheKey = prompt;
+    // 🔥 FIX #3: IMPROVE CACHE KEY FOR CONSISTENCY
+    // For sports queries, always use normalized key to ensure same query = same cache
+    let cacheKey = prompt;
+
+    // Normalize sports query cache keys for consistency
+    const sportKeywords = ['ipl', 'cricket', 'match', 'sports'];
+    if (sportKeywords.some(keyword => prompt.toLowerCase().includes(keyword))) {
+        // For sports queries like "todays ipl match", "cricket match", etc.
+        // normalize to a consistent key
+        const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+        cacheKey = `sports_${today}`;
+        console.log(`[Cache] Sports query normalized to key: ${cacheKey}`);
+    }
+
     const cached = cacheManager.get(cacheKey);
 
     if (cached) {
-        console.log('[Cache HIT] Returning cached real-time data');
+        console.log(`[Cache HIT] Returning cached result for: "${prompt}"`);
         return cached;
     }
+
+    console.log(`[Cache MISS] Fetching fresh data for: "${prompt}"`);
 
     // Detect query types
     const queryTypes = detectQueryType(prompt);
