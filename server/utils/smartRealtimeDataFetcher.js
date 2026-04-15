@@ -305,34 +305,86 @@ export async function fetchWikipediaSearch(query) {
 }
 
 /**
- * Check if a match is scheduled for today
- * @param {string} matchDate - Match date string (various formats)
+ * Check if a match is scheduled for today (with flexible date parsing)
+ * @param {string|number} matchDate - Match date (ISO string, Unix timestamp, etc.)
  * @returns {boolean} True if match is today
  */
 function isTodaysMatch(matchDate) {
     if (!matchDate) return false;
 
     try {
-        // Parse the date - handle various formats
         let matchTime;
 
-        if (typeof matchDate === 'string') {
-            // Handle ISO format, Unix timestamp, or date strings
+        // Handle Unix timestamp in seconds (most common from APIs)
+        if (typeof matchDate === 'number') {
+            // If it's a reasonable Unix timestamp in seconds (not milliseconds)
+            if (matchDate < 10000000000) {
+                matchTime = matchDate * 1000; // Convert seconds to milliseconds
+            } else {
+                matchTime = matchDate; // Already in milliseconds
+            }
+        }
+        // Handle string dates
+        else if (typeof matchDate === 'string') {
+            // Try parsing as ISO string first
             matchTime = new Date(matchDate).getTime();
+
+            // If parsing failed or returned Invalid Date, try as number
+            if (isNaN(matchTime)) {
+                const asNumber = parseInt(matchDate);
+                if (!isNaN(asNumber)) {
+                    matchTime = asNumber < 10000000000 ? asNumber * 1000 : asNumber;
+                } else {
+                    return false;
+                }
+            }
         } else {
-            matchTime = new Date(matchDate).getTime();
+            return false;
         }
 
-        // Get today's date at midnight UTC
-        const now = new Date();
-        const todayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-        const todayEnd = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000);
+        if (isNaN(matchTime)) return false;
 
-        return matchTime >= todayStart.getTime() && matchTime < todayEnd.getTime();
+        // Get today's date boundaries in local timezone (more reliable)
+        const today = new Date();
+        const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0, 0);
+        const todayEnd = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999);
+
+        const matchDate_obj = new Date(matchTime);
+
+        console.log(`[Sports] Parsed match date: ${matchDate_obj.toISOString()} (Today: ${todayStart.toISOString()} - ${todayEnd.toISOString()})`);
+
+        return matchDate_obj >= todayStart && matchDate_obj <= todayEnd;
     } catch (error) {
-        console.warn('Could not parse match date:', matchDate, error.message);
+        console.warn('[Sports] Could not parse match date:', matchDate, error.message);
         return false;
     }
+}
+
+/**
+ * Get "upcoming" matches (today or very soon) with flexible filtering
+ * Fallback when strict today-filtering returns nothing
+ */
+function getUpcomingMatches(allMatches, maxHoursAhead = 48) {
+    const now = new Date();
+    const futureLimit = new Date(now.getTime() + maxHoursAhead * 60 * 60 * 1000);
+
+    return allMatches.filter(match => {
+        const date = match.date || match.dateTimeGMT || match.dateTime;
+        if (!date) return false;
+
+        try {
+            let matchTime;
+            if (typeof date === 'number') {
+                matchTime = date < 10000000000 ? date * 1000 : date;
+            } else {
+                matchTime = new Date(date).getTime();
+            }
+
+            return matchTime >= now.getTime() && matchTime <= futureLimit.getTime();
+        } catch (e) {
+            return false;
+        }
+    });
 }
 
 /**
@@ -379,25 +431,46 @@ export async function fetchSportsData() {
             }
         }
 
-        // 🔥 FIX #1: FILTER FOR TODAY'S MATCHES ONLY
+        // 🔥 FIX #1: FILTER FOR TODAY'S MATCHES (with fallback)
         if (response && response.data && Array.isArray(response.data) && response.data.length > 0) {
-            const todaysMatches = response.data.filter(match => {
+            console.log(`[Sports] API returned ${response.data.length} total matches, filtering for today...`);
+
+            // DEBUG: Log first match structure to understand format
+            if (response.data.length > 0) {
+                const firstMatch = response.data[0];
+                console.log('[Sports] First match from API:', {
+                    name: firstMatch.name || firstMatch.matchName,
+                    date: firstMatch.date,
+                    dateTimeGMT: firstMatch.dateTimeGMT,
+                    dateTime: firstMatch.dateTime,
+                    status: firstMatch.status,
+                    series: firstMatch.series
+                });
+            }
+
+            // First, try to find today's matches
+            let todaysMatches = response.data.filter(match => {
                 const matchDate = match.date || match.dateTimeGMT || match.dateTime;
-                const isToday = isTodaysMatch(matchDate);
-                if (isToday) {
-                    console.log(`[Sports] Found today's match: ${match.team1 || 'Team A'} vs ${match.team2 || 'Team B'}`);
-                }
-                return isToday;
+                return isTodaysMatch(matchDate);
             });
 
+            console.log(`[Sports] Found ${todaysMatches.length} today's matches after filtering`);
+
+            // FALLBACK: If no matches today, get upcoming matches (next 48 hours)
             if (todaysMatches.length === 0) {
-                console.log('[Sports] No matches found for today');
+                console.log('[Sports] No strict today matches found, trying upcoming matches (next 48 hours)...');
+                todaysMatches = getUpcomingMatches(response.data, 48);
+                console.log(`[Sports] Found ${todaysMatches.length} upcoming matches in next 48 hours`);
+            }
+
+            if (todaysMatches.length === 0) {
+                console.log('[Sports] No matches found for today or upcoming');
                 return {
                     type: 'sports',
                     sport: 'cricket',
                     matches: [{
                         name: 'Cricket Matches',
-                        status: 'No matches scheduled for today',
+                        status: 'No matches found in upcoming schedule',
                         suggestion: 'Check back later or visit ipl.com for upcoming matches'
                     }],
                     source: apiSource,
@@ -405,10 +478,10 @@ export async function fetchSportsData() {
                 };
             }
 
-            // 🔥 FIX #2: RETURN ONLY THE FIRST (MAIN) MATCH FOR TODAY
+            // 🔥 FIX #2: RETURN ONLY THE FIRST (MAIN) MATCH
             // This ensures consistent single-match response
             const mainMatch = todaysMatches[0];
-            console.log(`[Sports] Returning main match for today: ${mainMatch.team1 || 'Team A'} vs ${mainMatch.team2 || 'Team B'}`);
+            console.log(`[Sports] Returning main match: ${mainMatch.team1 || 'Team A'} vs ${mainMatch.team2 || 'Team B'}`);
 
             const matches = [{
                 name: mainMatch.name || mainMatch.matchName || `${mainMatch.team1} vs ${mainMatch.team2}`,
@@ -433,12 +506,13 @@ export async function fetchSportsData() {
             };
         } else {
             // Fallback: Return generic sports info with helpful links
+            console.log('[Sports] No data from API or empty response');
             return {
                 type: 'sports',
                 sport: 'cricket',
                 matches: [{
                     name: 'Cricket Matches',
-                    status: 'No matches available',
+                    status: 'No match data available',
                     suggestion: 'Please check: espncricinfo.com, ipl.com, or cricket.yahoo.com for live match details and current scores'
                 }],
                 source: 'Real-Time Sports Feed',
@@ -707,8 +781,24 @@ export async function fetchRealtimeDataIfNeeded(prompt) {
         queryTypes
     };
 
-    // Cache the result
-    const ttl = CacheManager.getTTL(queryTypes[0] || 'default');
+    // Smart cache TTL: shorter for sports with no matches, longer for sports with matches
+    let ttl = CacheManager.getTTL(queryTypes[0] || 'default');
+
+    // Check if this is a sports query with no actual matches
+    if (queryTypes.includes('sports') && fetchedData.length > 0) {
+        const sportsData = fetchedData.find(d => d.type === 'sports');
+        if (sportsData && (!sportsData.matches || sportsData.matches.length === 0 ||
+            sportsData.matches[0]?.status === 'No matches found in upcoming schedule')) {
+            // If no matches found, use shorter TTL so we keep retrying
+            ttl = 60; // 1 minute instead of 10 minutes
+            console.log('[Cache] Sports query with no matches: using 60s TTL (keep retrying)');
+        } else if (sportsData && sportsData.matches && sportsData.matches.length > 0) {
+            // If matches found, use longer TTL
+            ttl = 900; // 15 minutes for actual matches
+            console.log('[Cache] Sports query with matches: using 900s TTL');
+        }
+    }
+
     cacheManager.set(cacheKey, result, ttl);
     console.log(`[Cache SET] Result cached for ${ttl}s`);
 
